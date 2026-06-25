@@ -1,0 +1,42 @@
+{
+  "name": "automatizador",
+  "version": "1.0.0",
+  "description": "App de escritorio para automatizar correos (Gmail/Workspace) y preparar DMs de Instagram de forma semi-manual.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "makeicon": "node tools/makeicon.js",
+    "dist": "electron-builder"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.1"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.16"
+  },
+  "build": {
+    "appId": "com.santiago.automatizador",
+    "productName": "Automatizador",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "shortcutName": "Automatizador"
+    }
+  }
+}
