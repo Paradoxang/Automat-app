@@ -41,6 +41,19 @@ contextBridge.exposeInMainWorld('api', {
   ig: {
     open: (usuario) => invoke('ig:open', usuario)
   },
+  waLeads: {
+    save: (l) => invoke('waLeads:save', l),
+    remove: (id) => invoke('waLeads:remove', id),
+    setEstado: (id, estado) => invoke('waLeads:setEstado', id, estado),
+    importCsv: () => invoke('waLeads:importCsv')
+  },
+  waTemplates: {
+    save: (t) => invoke('waTemplates:save', t),
+    remove: (id) => invoke('waTemplates:remove', id)
+  },
+  wa: {
+    open: (payload) => invoke('wa:open', payload)
+  },
   clipboard: {
     write: (text) => invoke('clipboard:write', text)
   },

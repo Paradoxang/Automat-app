@@ -5,7 +5,7 @@ const app = document.getElementById('app');
 
 let DB = null;
 let route = 'inicio';
-const tabs = { correo: 'contactos', instagram: 'leads' };
+const tabs = { correo: 'contactos', instagram: 'leads', whatsapp: 'leads' };
 
 // ---------- utils ----------
 function esc(s) {
@@ -16,7 +16,8 @@ function val(sel) { const el = document.querySelector(sel); return el ? el.value
 function renderMsg(tpl, lead) {
   return String(tpl == null ? '' : tpl)
     .split('{{nombre}}').join(lead.nombre || '')
-    .split('{{usuario}}').join(lead.usuario || '');
+    .split('{{usuario}}').join(lead.usuario || '')
+    .split('{{numero}}').join(lead.numero || '');
 }
 async function refresh() { DB = await api.data.get(); }
 
@@ -95,6 +96,7 @@ function renderApp() {
       <div class="nav-item" data-act="nav" data-route="inicio"><span class="ic">▦</span> Inicio</div>
       <div class="nav-item" data-act="nav" data-route="correo"><span class="ic">✉</span> Correo</div>
       <div class="nav-item" data-act="nav" data-route="instagram"><span class="ic">◎</span> Instagram</div>
+      <div class="nav-item" data-act="nav" data-route="whatsapp"><span class="ic">✆</span> WhatsApp</div>
       <div class="nav-item" data-act="nav" data-route="ajustes"><span class="ic">⚙</span> Ajustes</div>
       <div class="spacer"></div>
       <div class="nav-item" data-act="logout"><span class="ic">⎋</span> Salir</div>
@@ -121,26 +123,27 @@ function renderRoute() {
   if (route === 'inicio') main.innerHTML = head('Inicio', 'Resumen de tu actividad') + viewInicio();
   else if (route === 'correo') main.innerHTML = head('Correo', 'Campañas a posibles clientes') + correoView();
   else if (route === 'instagram') main.innerHTML = head('Instagram', 'DMs semi-manuales, sin riesgo de bloqueo') + instagramView();
-  else if (route === 'ajustes') main.innerHTML = head('Ajustes', 'Conexión de correo y ritmo de envío') + viewAjustes();
+  else if (route === 'whatsapp') main.innerHTML = head('WhatsApp', 'Mensajes asistidos vía wa.me, sin riesgo de bloqueo') + whatsappView();
+  else if (route === 'ajustes') main.innerHTML = head('Ajustes', 'Conexión de correo, ritmo de envío e indicativo') + viewAjustes();
 }
 
 // ---------- Inicio ----------
 function viewInicio() {
-  const c = DB.emailContacts, leads = DB.igLeads;
-  const pend = leads.filter((l) => l.estado === 'pendiente').length;
+  const c = DB.emailContacts, igLeads = DB.igLeads, waLeads = DB.waLeads;
+  const pend = igLeads.filter((l) => l.estado === 'pendiente').length + waLeads.filter((l) => l.estado === 'pendiente').length;
   return `
   <div class="stat-grid">
     <div class="stat"><div class="n">${c.length}</div><div class="l">Contactos de correo</div></div>
-    <div class="stat"><div class="n">${DB.emailTemplates.length}</div><div class="l">Plantillas de correo</div></div>
-    <div class="stat"><div class="n">${leads.length}</div><div class="l">Leads de Instagram</div></div>
-    <div class="stat"><div class="n">${pend}</div><div class="l">DMs pendientes</div></div>
+    <div class="stat"><div class="n">${igLeads.length}</div><div class="l">Leads de Instagram</div></div>
+    <div class="stat"><div class="n">${waLeads.length}</div><div class="l">Números de WhatsApp</div></div>
+    <div class="stat"><div class="n">${pend}</div><div class="l">Mensajes pendientes</div></div>
   </div>
   <div class="card"><h3>Estado del correo</h3>
     ${DB.email.hasPass
       ? `<span class="badge ok">● Configurado</span> <span class="muted">${esc(DB.email.smtpUser)}</span>`
       : `<span class="badge err">● Sin configurar</span> <span class="muted">Ve a Ajustes para conectar tu Gmail.</span>`}
   </div>
-  <div class="callout"><b>Sobre Instagram:</b> el envío es semi-manual a propósito. La app arma el mensaje y abre el chat; tú das enviar. Así evitas bloqueos de la cuenta y respetas los Términos de Instagram.</div>
+  <div class="callout"><b>Instagram y WhatsApp:</b> el envío es semi-manual a propósito. La app arma el mensaje personalizado y abre el chat; tú das enviar. Así evitas bloqueos de la cuenta y respetas los Términos de cada plataforma.</div>
   <div class="callout"><b>Buenas prácticas de correo:</b> escribe solo a contactos con interés real, ofrece una forma de darse de baja y respeta la Ley 1581 (Habeas Data). Marca como "baja" a quien lo pida.</div>`;
 }
 
@@ -321,6 +324,93 @@ async function igCopy(id) {
   toast('Mensaje copiado al portapapeles', 'ok');
 }
 
+// ---------- WhatsApp ----------
+function whatsappView() {
+  const bar = tabsBar('whatsapp', [['leads', 'Números'], ['plantillas', 'Plantillas'], ['enviar', 'Enviar']]);
+  const t = tabs.whatsapp;
+  let body = '';
+  if (t === 'leads') body = waLeadsTab();
+  else if (t === 'plantillas') body = waPlantillasTab();
+  else body = waEnviarTab();
+  return bar + body;
+}
+
+function waLeadsTab() {
+  const ls = DB.waLeads, cc = DB.settings.waCountryCode || '57';
+  return `
+  <div class="row between" style="margin-bottom:14px">
+    <span class="hint">CSV con columnas <span class="code">numero,nombre</span>. Indicativo <span class="code">+${esc(cc)}</span> (Ajustes).</span>
+    <div class="row" style="gap:8px"><button data-act="wa-import">Importar CSV</button><button class="primary" data-act="wa-new">Nuevo número</button></div>
+  </div>
+  <div class="card" style="padding:0"><table><thead><tr><th>Número</th><th>Nombre</th><th>Notas</th><th>Estado</th><th></th></tr></thead><tbody>
+  ${ls.length ? ls.map((l) => `<tr>
+    <td class="mono">+${esc(cc)} ${esc(l.numero)}</td>
+    <td>${esc(l.nombre || '—')}</td>
+    <td class="muted">${esc(l.notas || '')}</td>
+    <td><span class="badge ${l.estado}">${l.estado}</span></td>
+    <td class="actions">
+      <button class="sm" data-act="wa-toggle" data-id="${l.id}">${l.estado === 'enviado' ? 'Pendiente' : 'Enviado'}</button>
+      <button class="sm" data-act="wa-edit" data-id="${l.id}">Editar</button>
+      <button class="sm danger" data-act="wa-del" data-id="${l.id}">×</button>
+    </td></tr>`).join('') : '<tr><td colspan="5" class="empty">Sin números todavía.</td></tr>'}
+  </tbody></table></div>`;
+}
+
+function waPlantillasTab() {
+  const ts = DB.waTemplates;
+  return `
+  <div class="row end" style="margin-bottom:14px"><button class="primary" data-act="watpl-new">Nueva plantilla</button></div>
+  ${ts.length ? ts.map((t) => `<div class="card"><div class="row between">
+    <div style="flex:1"><b>${esc(t.nombre)}</b><div class="muted" style="margin-top:6px;white-space:pre-wrap">${esc((t.cuerpo || '').slice(0, 140))}${(t.cuerpo || '').length > 140 ? '…' : ''}</div></div>
+    <div class="row"><button class="sm" data-act="watpl-edit" data-id="${t.id}">Editar</button><button class="sm danger" data-act="watpl-del" data-id="${t.id}">Eliminar</button></div>
+  </div></div>`).join('') : '<div class="card empty">Sin plantillas. Crea una con variables {{nombre}} y {{numero}}.</div>'}`;
+}
+
+function waEnviarTab() {
+  const tpls = DB.waTemplates, leads = DB.waLeads;
+  const pend = leads.filter((l) => l.estado === 'pendiente').length;
+  return `
+  <div class="card"><h3>1) Elige la plantilla de mensaje</h3>
+    <select id="wa-tpl">${tpls.length ? tpls.map((t) => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('') : '<option value="">— sin plantillas —</option>'}</select>
+    <div class="hint">Variables: <span class="code">{{nombre}}</span> <span class="code">{{numero}}</span></div>
+  </div>
+  <div class="card">
+    <div class="row between"><h3 style="margin:0">2) Números</h3><span class="muted">${pend} pendientes</span></div>
+    <div class="callout" style="margin-top:12px"><b>Abrir WhatsApp</b> abre el chat con el <b>mensaje ya escrito</b> → solo das <b>Enviar</b> en WhatsApp → <b>Marcar enviado</b>.</div>
+    <div style="margin-top:6px">${leads.length ? leads.map(waLeadCard).join('') : '<div class="empty">No hay números. Agrégalos en la pestaña Números.</div>'}</div>
+  </div>`;
+}
+
+function waLeadCard(l) {
+  const cc = DB.settings.waCountryCode || '57';
+  return `<div class="card" style="background:var(--panel-2);margin-bottom:10px">
+    <div class="row between">
+      <div><b>${esc(l.nombre || ('+' + cc + ' ' + l.numero))}</b> <span class="muted mono">+${esc(cc)} ${esc(l.numero)}</span></div>
+      <span class="badge ${l.estado}">${l.estado}</span>
+    </div>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <button class="sm" data-act="wa-copy" data-id="${l.id}">Copiar mensaje</button>
+      <button class="sm primary" data-act="wa-open" data-id="${l.id}">Abrir WhatsApp</button>
+      <button class="sm" data-act="wa-sent" data-id="${l.id}" ${l.estado === 'enviado' ? 'disabled' : ''}>Marcar enviado</button>
+    </div>
+  </div>`;
+}
+
+async function waCopy(id) {
+  const tpl = DB.waTemplates.find((t) => t.id === val('#wa-tpl'));
+  if (!tpl) return toast('Crea o elige una plantilla', 'err');
+  const lead = DB.waLeads.find((l) => l.id === id);
+  await api.clipboard.write(renderMsg(tpl.cuerpo, lead));
+  toast('Mensaje copiado al portapapeles', 'ok');
+}
+
+async function waOpen(id) {
+  const tpl = DB.waTemplates.find((t) => t.id === val('#wa-tpl'));
+  if (!tpl) return toast('Crea o elige una plantilla', 'err');
+  const lead = DB.waLeads.find((l) => l.id === id);
+  await api.wa.open({ numero: lead.numero, mensaje: renderMsg(tpl.cuerpo, lead) });
+}
+
 // ---------- Ajustes ----------
 function viewAjustes() {
   const e = DB.email, s = DB.settings;
@@ -340,6 +430,11 @@ function viewAjustes() {
       <div class="field"><label>Máximo por tanda</label><input id="s-cap" type="number" min="1" value="${s.dailyCap}"></div>
     </div>
     <div class="hint">Un ritmo más lento reduce el riesgo de que Gmail marque tus envíos como spam. Gmail gratuito permite ~500/día; Workspace ~2.000/día.</div>
+  </div>
+  <div class="card"><h3>WhatsApp</h3>
+    <div class="field" style="max-width:240px"><label>Indicativo de país (por defecto)</label><input id="s-wacc" value="${esc(s.waCountryCode || '57')}" placeholder="57"></div>
+    <div class="hint">Se antepone a todos los números de WhatsApp (ej. <span class="code">57</span> = Colombia). Sin el signo <span class="code">+</span>.</div>
+    <div class="row" style="margin-top:12px"><button class="primary" data-act="settings-save">Guardar</button></div>
   </div>`;
 }
 
@@ -348,7 +443,7 @@ async function saveSettings() {
     from: val('#s-from'),
     smtpUser: val('#s-user'),
     pass: val('#s-pass') || undefined,
-    settings: { delaySeconds: Number(val('#s-delay')), dailyCap: Number(val('#s-cap')) }
+    settings: { delaySeconds: Number(val('#s-delay')), dailyCap: Number(val('#s-cap')), waCountryCode: val('#s-wacc') }
   });
   await refresh();
 }
@@ -413,6 +508,34 @@ function igTemplateModal(t) {
       await refresh(); renderRoute(); toast('Plantilla guardada', 'ok');
     });
 }
+function waLeadModal(l) {
+  l = l || {};
+  const cc = DB.settings.waCountryCode || '57';
+  openModal(l.id ? 'Editar número' : 'Nuevo número', `
+    <div class="field"><label>Número de WhatsApp (sin indicativo)</label><input id="m-numero" value="${esc(l.numero || '')}" placeholder="300 123 4567"></div>
+    <div class="field"><label>Nombre (opcional)</label><input id="m-nombre" value="${esc(l.nombre || '')}"></div>
+    <div class="field"><label>Notas (opcional)</label><textarea id="m-notas" style="min-height:80px">${esc(l.notas || '')}</textarea></div>
+    <div class="hint">Se enviará a <span class="code">+${esc(cc)}</span> + el número. El indicativo se cambia en Ajustes.</div>`,
+    async (bg) => {
+      const numero = bg.querySelector('#m-numero').value.replace(/\D/g, '');
+      if (numero.length < 7) { toast('Número no válido', 'err'); return false; }
+      await api.waLeads.save({ id: l.id, numero, nombre: bg.querySelector('#m-nombre').value, notas: bg.querySelector('#m-notas').value });
+      await refresh(); renderRoute(); toast('Número guardado', 'ok');
+    });
+}
+function waTemplateModal(t) {
+  t = t || {};
+  openModal(t.id ? 'Editar plantilla' : 'Nueva plantilla', `
+    <div class="field"><label>Nombre interno</label><input id="m-nombre" value="${esc(t.nombre || '')}"></div>
+    <div class="field"><label>Mensaje</label><textarea id="m-cuerpo" style="min-height:170px" placeholder="Hola {{nombre}} 👋 ...">${esc(t.cuerpo || '')}</textarea></div>
+    <div class="hint">Variables: <span class="code">{{nombre}}</span> <span class="code">{{numero}}</span></div>`,
+    async (bg) => {
+      const nombre = bg.querySelector('#m-nombre').value.trim();
+      if (!nombre) { toast('Ponle un nombre', 'err'); return false; }
+      await api.waTemplates.save({ id: t.id, nombre, cuerpo: bg.querySelector('#m-cuerpo').value });
+      await refresh(); renderRoute(); toast('Plantilla guardada', 'ok');
+    });
+}
 
 // ---------- event delegation ----------
 async function onClick(e) {
@@ -451,6 +574,20 @@ async function onClick(e) {
     case 'ig-copy': return igCopy(id);
     case 'ig-open': { const l = DB.igLeads.find((x) => x.id === id); await api.ig.open(l.usuario); } return;
     case 'ig-sent': await api.leads.setEstado(id, 'enviado'); await refresh(); renderRoute(); toast('Marcado como enviado', 'ok'); return;
+
+    case 'wa-new': return waLeadModal();
+    case 'wa-edit': return waLeadModal(DB.waLeads.find((l) => l.id === id));
+    case 'wa-del': if (confirm('¿Eliminar número?')) { await api.waLeads.remove(id); await refresh(); renderRoute(); } return;
+    case 'wa-toggle': { const l = DB.waLeads.find((x) => x.id === id); await api.waLeads.setEstado(id, l.estado === 'enviado' ? 'pendiente' : 'enviado'); await refresh(); renderRoute(); } return;
+    case 'wa-import': { const r = await api.waLeads.importCsv(); await refresh(); renderRoute(); toast(`${r.added} números importados`, r.added ? 'ok' : 'err'); } return;
+
+    case 'watpl-new': return waTemplateModal();
+    case 'watpl-edit': return waTemplateModal(DB.waTemplates.find((t) => t.id === id));
+    case 'watpl-del': if (confirm('¿Eliminar plantilla?')) { await api.waTemplates.remove(id); await refresh(); renderRoute(); } return;
+
+    case 'wa-copy': return waCopy(id);
+    case 'wa-open': return waOpen(id);
+    case 'wa-sent': await api.waLeads.setEstado(id, 'enviado'); await refresh(); renderRoute(); toast('Marcado como enviado', 'ok'); return;
 
     case 'settings-save': await saveSettings(); renderRoute(); toast('Ajustes guardados', 'ok'); return;
     case 'settings-test': return settingsTest();

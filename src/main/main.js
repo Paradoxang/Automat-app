@@ -85,6 +85,14 @@ function pickCsvLines(content) {
   return String(content).split(/\r?\n/).filter((l) => l.trim().length);
 }
 
+// Normaliza un número a su forma local (sin indicativo, sin signos/espacios).
+function localNum(numero, cc) {
+  cc = String(cc || '57').replace(/\D/g, '') || '57';
+  let d = String(numero == null ? '' : numero).replace(/\D/g, '').replace(/^0+/, '');
+  if (d.length > 10 && d.startsWith(cc)) d = d.slice(cc.length);
+  return d;
+}
+
 // ---------- auth ----------
 ipcMain.handle('auth:status', () => ({ hasPassword: store.hasPassword() }));
 ipcMain.handle('auth:set', (_e, pw) => { store.setPassword(pw); return true; });
@@ -100,7 +108,9 @@ ipcMain.handle('data:get', () => {
     emailTemplates: d.emailTemplates,
     emailLog: d.emailLog.slice(0, 200),
     igLeads: d.igLeads,
-    igTemplates: d.igTemplates
+    igTemplates: d.igTemplates,
+    waLeads: d.waLeads,
+    waTemplates: d.waTemplates
   };
 });
 
@@ -118,7 +128,8 @@ ipcMain.handle('email:saveConfig', (_e, cfg) => {
   if (cfg.settings) {
     d.settings = {
       delaySeconds: Math.max(0, Number(cfg.settings.delaySeconds) || 0),
-      dailyCap: Math.max(1, Number(cfg.settings.dailyCap) || 1)
+      dailyCap: Math.max(1, Number(cfg.settings.dailyCap) || 1),
+      waCountryCode: String(cfg.settings.waCountryCode || d.settings.waCountryCode || '57').replace(/\D/g, '') || '57'
     };
   }
   store.save();
@@ -341,6 +352,105 @@ ipcMain.handle('igTemplates:remove', (_e, id) => {
 ipcMain.handle('ig:open', (_e, usuario) => {
   const u = String(usuario || '').trim().replace(/^@/, '');
   if (u) shell.openExternal('https://ig.me/m/' + encodeURIComponent(u));
+  return true;
+});
+
+// ---------- whatsapp leads ----------
+ipcMain.handle('waLeads:save', (_e, l) => {
+  const d = store.get();
+  const cc = d.settings.waCountryCode || '57';
+  if (l.id) {
+    const i = d.waLeads.findIndex((x) => x.id === l.id);
+    if (i >= 0) {
+      const base = d.waLeads[i];
+      d.waLeads[i] = {
+        ...base,
+        nombre: (l.nombre != null ? l.nombre : base.nombre || '').trim(),
+        notas: (l.notas != null ? l.notas : base.notas || '').trim(),
+        numero: localNum(l.numero != null ? l.numero : base.numero, cc)
+      };
+    }
+  } else {
+    d.waLeads.push({
+      id: store.id(),
+      numero: localNum(l.numero, cc),
+      nombre: (l.nombre || '').trim(),
+      notas: (l.notas || '').trim(),
+      estado: 'pendiente'
+    });
+  }
+  store.save();
+  return true;
+});
+
+ipcMain.handle('waLeads:remove', (_e, id) => {
+  const d = store.get();
+  d.waLeads = d.waLeads.filter((l) => l.id !== id);
+  store.save();
+  return true;
+});
+
+ipcMain.handle('waLeads:setEstado', (_e, id, estado) => {
+  const d = store.get();
+  const l = d.waLeads.find((x) => x.id === id);
+  if (l) l.estado = estado;
+  store.save();
+  return true;
+});
+
+ipcMain.handle('waLeads:importCsv', async () => {
+  const res = await dialog.showOpenDialog(win, {
+    properties: ['openFile'],
+    filters: [{ name: 'CSV', extensions: ['csv', 'txt'] }]
+  });
+  if (res.canceled || !res.filePaths[0]) return { added: 0 };
+  const content = fs.readFileSync(res.filePaths[0], 'utf8');
+  const d = store.get();
+  const cc = d.settings.waCountryCode || '57';
+  let added = 0;
+  pickCsvLines(content).forEach((line, idx) => {
+    const cells = line.split(/[,;\t]/).map((s) => s.trim().replace(/^"|"$/g, ''));
+    if (idx === 0 && !/\d{7,}/.test(line) && /numero|número|telefono|teléfono|phone|nombre|name|whatsapp/i.test(line)) return; // header
+    const numCell = cells.find((c) => c.replace(/\D/g, '').length >= 7);
+    if (!numCell) return;
+    const numero = localNum(numCell, cc);
+    const nombre = cells.find((c) => c && c.replace(/\D/g, '').length < 7) || '';
+    if (!numero || d.waLeads.some((l) => l.numero === numero)) return;
+    d.waLeads.push({ id: store.id(), numero, nombre, notas: '', estado: 'pendiente' });
+    added++;
+  });
+  store.save();
+  return { added };
+});
+
+// ---------- whatsapp templates ----------
+ipcMain.handle('waTemplates:save', (_e, t) => {
+  const d = store.get();
+  if (t.id) {
+    const i = d.waTemplates.findIndex((x) => x.id === t.id);
+    if (i >= 0) d.waTemplates[i] = { ...d.waTemplates[i], ...t };
+  } else {
+    d.waTemplates.push({ id: store.id(), nombre: (t.nombre || 'Sin nombre').trim(), cuerpo: t.cuerpo || '' });
+  }
+  store.save();
+  return true;
+});
+
+ipcMain.handle('waTemplates:remove', (_e, id) => {
+  const d = store.get();
+  d.waTemplates = d.waTemplates.filter((t) => t.id !== id);
+  store.save();
+  return true;
+});
+
+// Abre WhatsApp (web/escritorio) con el número y el mensaje ya escrito.
+ipcMain.handle('wa:open', (_e, payload) => {
+  const d = store.get();
+  const cc = (d.settings.waCountryCode || '57').replace(/\D/g, '') || '57';
+  const local = localNum(payload && payload.numero, cc);
+  if (!local) return false;
+  const text = payload && payload.mensaje ? ('?text=' + encodeURIComponent(payload.mensaje)) : '';
+  shell.openExternal('https://wa.me/' + cc + local + text);
   return true;
 });
 

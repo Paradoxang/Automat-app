@@ -14,7 +14,9 @@ const DEFAULTS = {
   emailLog: [], // { id, to, nombre, asunto, status, error, ts }
   igLeads: [], // { id, usuario, nombre, notas, estado }
   igTemplates: [], // { id, nombre, cuerpo }
-  settings: { delaySeconds: 8, dailyCap: 200 }
+  waLeads: [], // { id, numero, nombre, notas, estado }
+  waTemplates: [], // { id, nombre, cuerpo }
+  settings: { delaySeconds: 8, dailyCap: 200, waCountryCode: '57' }
 };
 
 function clone(o) { return JSON.parse(JSON.stringify(o)); }

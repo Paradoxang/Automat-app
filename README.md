@@ -5,7 +5,7 @@
 # Automatizador
 
 **App de escritorio para automatizar la captación de clientes:**
-campañas de correo desde Gmail/Workspace y mensajes de Instagram asistidos — todo desde un solo panel, con tus datos cifrados en tu propio equipo.
+campañas de correo desde Gmail/Workspace y mensajes asistidos de Instagram y WhatsApp — todo desde un solo panel, con tus datos cifrados en tu propio equipo.
 
 ![Electron](https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=nodedotjs&logoColor=white)
@@ -25,6 +25,7 @@ Una herramienta de *outreach* (prospección comercial) empaquetada como aplicaci
 | --- | --- |
 | 📧 **Correo** | Envía campañas personalizadas a posibles clientes desde tu Gmail / Google Workspace, con plantillas, listas de contactos, control de ritmo anti-spam e historial de envíos. |
 | 📸 **Instagram** | Gestiona *leads* y plantillas; la app arma el mensaje personalizado, lo copia y abre el chat. Tú das *enviar*. **Cero riesgo de bloqueo de la cuenta.** |
+| 💬 **WhatsApp** | Gestiona números y plantillas; abre el chat de WhatsApp con el **mensaje ya escrito** vía `wa.me`. Solo das *enviar*. **Cero riesgo de bloqueo de la línea.** |
 | 🔐 **Seguridad** | Acceso con contraseña local, credenciales **cifradas por el sistema operativo** y datos guardados **solo en tu equipo**. Nada viaja a servidores de terceros. |
 
 ---
@@ -46,6 +47,13 @@ Una herramienta de *outreach* (prospección comercial) empaquetada como aplicaci
 - **Seguimiento de estado** (pendiente / enviado) por cada lead.
 
 > 💡 **¿Por qué semi-manual?** Automatizar DMs en frío viola los Términos de Instagram y puede causar el **bloqueo permanente** de la cuenta. Esta app te da toda la velocidad de la automatización (mensajes listos y personalizados) sin ese riesgo: el último clic siempre es tuyo.
+
+### 💬 Módulo de WhatsApp (semi-manual por diseño)
+- **Números** con nombre y notas; importables por **CSV** (`numero,nombre`).
+- **Indicativo de país configurable** (por defecto **+57**, Colombia) que se antepone a todos los números automáticamente.
+- **Plantillas** con variables `{{nombre}}` y `{{numero}}`.
+- **Flujo ultra-rápido:** `Abrir WhatsApp` abre el chat (`wa.me`) con **el mensaje ya escrito** → das *Enviar* → `Marcar enviado`.
+- **Normalización inteligente** de números: ignora espacios, guiones y ceros iniciales, y no duplica el indicativo si ya viene incluido.
 
 ### 🔐 Seguridad y privacidad
 - **Acceso con contraseña** local, almacenada con hash **scrypt** (nunca en texto plano).
@@ -128,7 +136,7 @@ La primera vez te pedirá **crear una contraseña de acceso** para proteger la a
 ## 📨 Cómo se usa
 
 <table>
-<tr><th>Correo</th><th>Instagram</th></tr>
+<tr><th>Correo</th><th>Instagram</th><th>WhatsApp</th></tr>
 <tr valign="top"><td>
 
 1. **Plantillas** → crea tu mensaje con `{{nombre}}`.
@@ -140,6 +148,12 @@ La primera vez te pedirá **crear una contraseña de acceso** para proteger la a
 1. **Plantillas** → mensaje con `{{nombre}}` / `{{usuario}}`.
 2. **Leads** → agrégalos o importa un CSV.
 3. **Enviar DMs** → por cada lead: *Copiar* → *Abrir DM* → enviar → *Marcar enviado*.
+
+</td><td>
+
+1. **Plantillas** → mensaje con `{{nombre}}` / `{{numero}}`.
+2. **Números** → agrégalos o importa un CSV.
+3. **Enviar** → por cada número: *Abrir WhatsApp* (chat con mensaje listo) → enviar → *Marcar enviado*.
 
 </td></tr>
 </table>
@@ -165,7 +179,7 @@ Esta herramienta está pensada para **prospección legítima** hacia contactos c
 
 - Incluye siempre una forma de **darse de baja** y respeta a quien lo pida (botón *Dar de baja*).
 - Cumple la **Ley 1581 de 2012 (Habeas Data, Colombia)** y la normativa de protección de datos aplicable.
-- Respeta los **Términos de Servicio** de Gmail e Instagram. El módulo de Instagram es **semi-manual a propósito** para no violarlos.
+- Respeta los **Términos de Servicio** de Gmail, Instagram y WhatsApp. Los módulos de Instagram y WhatsApp son **semi-manuales a propósito** para no violarlos.
 
 ---
 
