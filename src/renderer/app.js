@@ -16,6 +16,7 @@ function val(sel) { const el = document.querySelector(sel); return el ? el.value
 function renderMsg(tpl, lead) {
   return String(tpl == null ? '' : tpl)
     .split('{{nombre}}').join(lead.nombre || '')
+    .split('{{email}}').join(lead.email || '')
     .split('{{usuario}}').join(lead.usuario || '')
     .split('{{numero}}').join(lead.numero || '');
 }
@@ -51,6 +52,13 @@ function openModal(title, bodyHtml, onSave) {
   const first = bg.querySelector('input,textarea'); if (first) first.focus();
 }
 function closeModal() { const m = document.querySelector('.modal-bg'); if (m) m.remove(); }
+
+// Opciones <option> de plantillas para un <select>.
+function tplOptions(list) {
+  return list.length
+    ? list.map((t) => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('')
+    : '<option value="">— sin plantillas —</option>';
+}
 
 // ---------- auth screens ----------
 function renderLogin() {
@@ -163,12 +171,15 @@ function emailContactosTab() {
   const cs = DB.emailContacts;
   return `
   <div class="row between" style="margin-bottom:14px">
-    <span class="hint">CSV con columnas <span class="code">nombre,email</span> (o solo correos).</span>
-    <div class="row" style="gap:8px"><button data-act="contact-import">Importar CSV</button><button class="primary" data-act="contact-new">Nuevo contacto</button></div>
+    <div class="row" style="gap:10px;align-items:center">
+      <input type="search" class="list-search" placeholder="Buscar contacto…  (Ctrl+F)" style="width:300px">
+      <span class="search-count muted" style="font-size:12px"></span>
+    </div>
+    <div class="row" style="gap:8px"><button data-act="contact-import" title="CSV: nombre,email">Importar CSV</button><button class="primary" data-act="contact-new">Nuevo contacto</button></div>
   </div>
   <div class="card" style="padding:0">
    <table><thead><tr><th>Nombre</th><th>Correo</th><th>Etiquetas</th><th>Estado</th><th></th></tr></thead><tbody>
-   ${cs.length ? cs.map((c) => `<tr>
+   ${cs.length ? cs.map((c) => `<tr data-search="${esc(((c.nombre || '') + ' ' + (c.email || '') + ' ' + (c.tags || '')).toLowerCase())}">
      <td>${esc(c.nombre || '—')}</td>
      <td class="mono">${esc(c.email)}</td>
      <td class="muted">${esc(c.tags || '')}</td>
@@ -195,21 +206,24 @@ function emailPlantillasTab() {
 function emailEnviarTab() {
   const tpls = DB.emailTemplates, cs = DB.emailContacts;
   return `
-  <div class="card"><h3>1) Elige la plantilla</h3>
-    <select id="send-tpl">${tpls.length ? tpls.map((t) => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('') : '<option value="">— sin plantillas —</option>'}</select>
-  </div>
   <div class="card">
-    <div class="row between"><h3 style="margin:0">2) Destinatarios</h3>
+    <div class="row between">
+      <div class="row" style="gap:10px;align-items:center">
+        <h3 style="margin:0">Destinatarios y plantilla</h3>
+        <input type="search" class="list-search" placeholder="Buscar…  (Ctrl+F)" style="width:220px">
+        <span class="search-count muted" style="font-size:12px"></span>
+      </div>
       <label class="row" style="margin:0;gap:6px;font-size:13px"><input type="checkbox" data-act="select-all" style="width:auto"> Seleccionar todos</label></div>
-    <div style="max-height:300px;overflow:auto;margin-top:12px"><table><tbody>
-    ${cs.length ? cs.map((c) => `<tr>
+    <div class="hint" style="margin-top:6px">Elige la plantilla de cada destinatario antes de enviar. Variables: <span class="code">{{nombre}}</span> <span class="code">{{email}}</span>.</div>
+    <div style="max-height:360px;overflow:auto;margin-top:12px"><table><tbody>
+    ${cs.length ? cs.map((c) => `<tr data-search="${esc(((c.nombre || '') + ' ' + (c.email || '')).toLowerCase())}">
       <td class="checkcell"><input type="checkbox" class="rcp" value="${c.id}" ${c.optOut ? 'disabled' : 'checked'} style="width:auto"></td>
       <td>${esc(c.nombre || '—')}<div class="muted mono" style="font-size:12px">${esc(c.email)}</div></td>
-      <td class="right">${c.optOut ? '<span class="badge optout">baja</span>' : ''}</td>
+      <td class="right">${c.optOut ? '<span class="badge optout">baja</span>' : `<select class="send-tpl" data-id="${c.id}" style="width:220px">${tplOptions(tpls)}</select>`}</td>
     </tr>`).join('') : '<tr><td class="empty">No hay contactos. Agrégalos en la pestaña Contactos.</td></tr>'}
     </tbody></table></div>
   </div>
-  <div class="card"><h3>3) Enviar</h3>
+  <div class="card"><h3>Enviar</h3>
     <div class="callout">Ritmo actual: <b>${DB.settings.delaySeconds}s</b> entre correos · máximo <b>${DB.settings.dailyCap}</b> por tanda. ${DB.email.hasPass ? '' : '<b style="color:var(--err)">⚠ Configura el correo en Ajustes.</b>'}</div>
     <button class="primary" data-act="send-run" ${tpls.length && DB.email.hasPass ? '' : 'disabled'}>Enviar campaña</button>
     <div class="progress-box" id="send-progress"></div>
@@ -229,14 +243,17 @@ function emailHistorialTab() {
 }
 
 async function runSend() {
-  const tplId = val('#send-tpl');
-  if (!tplId) return toast('Crea una plantilla primero', 'err');
-  const ids = [...document.querySelectorAll('.rcp:checked')].map((x) => x.value);
-  if (!ids.length) return toast('Selecciona al menos un destinatario', 'err');
+  const checked = [...document.querySelectorAll('.rcp:checked')];
+  if (!checked.length) return toast('Selecciona al menos un destinatario', 'err');
+  const items = checked.map((cb) => {
+    const sel = document.querySelector('.send-tpl[data-id="' + cb.value + '"]');
+    return { contactId: cb.value, templateId: sel ? sel.value : '' };
+  }).filter((it) => it.templateId);
+  if (!items.length) return toast('Elige una plantilla para los destinatarios', 'err');
   const box = document.querySelector('#send-progress'); box.innerHTML = '';
   const btn = document.querySelector('[data-act="send-run"]'); btn.disabled = true; btn.textContent = 'Enviando…';
   try {
-    const res = await api.email.send({ templateId: tplId, contactIds: ids });
+    const res = await api.email.send({ items });
     toast(`Listo: ${res.sent} enviados, ${res.failed} fallidos`, res.failed ? 'err' : 'ok');
     await refresh();
   } catch (e) {
@@ -260,11 +277,14 @@ function igLeadsTab() {
   const ls = DB.igLeads;
   return `
   <div class="row between" style="margin-bottom:14px">
-    <span class="hint">CSV con columnas <span class="code">usuario,nombre</span>.</span>
-    <div class="row" style="gap:8px"><button data-act="lead-import">Importar CSV</button><button class="primary" data-act="lead-new">Nuevo lead</button></div>
+    <div class="row" style="gap:10px;align-items:center">
+      <input type="search" class="list-search" placeholder="Buscar lead…  (Ctrl+F)" style="width:300px">
+      <span class="search-count muted" style="font-size:12px"></span>
+    </div>
+    <div class="row" style="gap:8px"><button data-act="lead-import" title="CSV: usuario,nombre">Importar CSV</button><button class="primary" data-act="lead-new">Nuevo lead</button></div>
   </div>
   <div class="card" style="padding:0"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Notas</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${ls.length ? ls.map((l) => `<tr>
+  ${ls.length ? ls.map((l) => `<tr data-search="${esc(((l.usuario || '') + ' ' + (l.nombre || '') + ' ' + (l.notas || '')).toLowerCase())}">
     <td class="mono">@${esc(l.usuario)}</td>
     <td>${esc(l.nombre || '—')}</td>
     <td class="muted">${esc(l.notas || '')}</td>
@@ -288,27 +308,31 @@ function igPlantillasTab() {
 }
 
 function igEnviarTab() {
-  const tpls = DB.igTemplates, leads = DB.igLeads;
+  const leads = DB.igLeads;
   const pend = leads.filter((l) => l.estado === 'pendiente').length;
   return `
-  <div class="card"><h3>1) Elige la plantilla de mensaje</h3>
-    <select id="ig-tpl">${tpls.length ? tpls.map((t) => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('') : '<option value="">— sin plantillas —</option>'}</select>
-    <div class="hint">Variables: <span class="code">{{nombre}}</span> <span class="code">{{usuario}}</span></div>
-  </div>
   <div class="card">
-    <div class="row between"><h3 style="margin:0">2) Leads</h3><span class="muted">${pend} pendientes</span></div>
-    <div class="callout" style="margin-top:12px">Flujo: <b>Copiar mensaje</b> → <b>Abrir DM</b> (se abre el chat en tu navegador) → pegas, envías → <b>Marcar enviado</b>.</div>
+    <div class="row between">
+      <div class="row" style="gap:10px;align-items:center">
+        <h3 style="margin:0">Leads</h3>
+        <input type="search" class="list-search" placeholder="Buscar…  (Ctrl+F)" style="width:240px">
+        <span class="search-count muted" style="font-size:12px"></span>
+      </div>
+      <span class="muted">${pend} pendientes</span>
+    </div>
+    <div class="callout" style="margin-top:12px">En cada lead: <b>elige la plantilla</b> → <b>Copiar mensaje</b> → <b>Abrir DM</b> → pegas y envías → <b>Marcar enviado</b>. Variables: <span class="code">{{nombre}}</span> <span class="code">{{usuario}}</span>.</div>
     <div style="margin-top:6px">${leads.length ? leads.map(igLeadCard).join('') : '<div class="empty">No hay leads. Agrégalos en la pestaña Leads.</div>'}</div>
   </div>`;
 }
 
 function igLeadCard(l) {
-  return `<div class="card" style="background:var(--panel-2);margin-bottom:10px">
+  return `<div class="card" data-search="${esc(((l.nombre || '') + ' ' + (l.usuario || '') + ' ' + (l.notas || '')).toLowerCase())}" style="background:var(--panel-2);margin-bottom:10px">
     <div class="row between">
       <div><b>${esc(l.nombre || l.usuario)}</b> <span class="muted mono">@${esc(l.usuario)}</span></div>
       <span class="badge ${l.estado}">${l.estado}</span>
     </div>
-    <div class="row" style="margin-top:10px;gap:8px">
+    <div class="row" style="margin-top:10px;gap:8px;align-items:center;flex-wrap:wrap">
+      <select class="card-tpl" data-id="${l.id}" style="width:220px">${tplOptions(DB.igTemplates)}</select>
       <button class="sm" data-act="ig-copy" data-id="${l.id}">Copiar mensaje</button>
       <button class="sm" data-act="ig-open" data-id="${l.id}">Abrir DM</button>
       <button class="sm primary" data-act="ig-sent" data-id="${l.id}" ${l.estado === 'enviado' ? 'disabled' : ''}>Marcar enviado</button>
@@ -317,7 +341,8 @@ function igLeadCard(l) {
 }
 
 async function igCopy(id) {
-  const tpl = DB.igTemplates.find((t) => t.id === val('#ig-tpl'));
+  const sel = document.querySelector('.card-tpl[data-id="' + id + '"]');
+  const tpl = DB.igTemplates.find((t) => t.id === (sel ? sel.value : ''));
   if (!tpl) return toast('Crea o elige una plantilla', 'err');
   const lead = DB.igLeads.find((l) => l.id === id);
   await api.clipboard.write(renderMsg(tpl.cuerpo, lead));
@@ -339,11 +364,14 @@ function waLeadsTab() {
   const ls = DB.waLeads, cc = DB.settings.waCountryCode || '57';
   return `
   <div class="row between" style="margin-bottom:14px">
-    <span class="hint">CSV con columnas <span class="code">numero,nombre</span>. Indicativo <span class="code">+${esc(cc)}</span> (Ajustes).</span>
-    <div class="row" style="gap:8px"><button data-act="wa-import">Importar CSV</button><button class="primary" data-act="wa-new">Nuevo número</button></div>
+    <div class="row" style="gap:10px;align-items:center">
+      <input type="search" class="list-search" placeholder="Buscar número o nombre…  (Ctrl+F)" style="width:300px">
+      <span class="search-count muted" style="font-size:12px"></span>
+    </div>
+    <div class="row" style="gap:8px"><button data-act="wa-import" title="CSV: numero,nombre">Importar CSV</button><button class="primary" data-act="wa-new">Nuevo número</button></div>
   </div>
   <div class="card" style="padding:0"><table><thead><tr><th>Número</th><th>Nombre</th><th>Notas</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${ls.length ? ls.map((l) => `<tr>
+  ${ls.length ? ls.map((l) => `<tr data-search="${esc(((l.numero || '') + ' ' + (l.nombre || '') + ' ' + (l.notas || '')).toLowerCase())}">
     <td class="mono">+${esc(cc)} ${esc(l.numero)}</td>
     <td>${esc(l.nombre || '—')}</td>
     <td class="muted">${esc(l.notas || '')}</td>
@@ -367,28 +395,32 @@ function waPlantillasTab() {
 }
 
 function waEnviarTab() {
-  const tpls = DB.waTemplates, leads = DB.waLeads;
+  const leads = DB.waLeads;
   const pend = leads.filter((l) => l.estado === 'pendiente').length;
   return `
-  <div class="card"><h3>1) Elige la plantilla de mensaje</h3>
-    <select id="wa-tpl">${tpls.length ? tpls.map((t) => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('') : '<option value="">— sin plantillas —</option>'}</select>
-    <div class="hint">Variables: <span class="code">{{nombre}}</span> <span class="code">{{numero}}</span></div>
-  </div>
   <div class="card">
-    <div class="row between"><h3 style="margin:0">2) Números</h3><span class="muted">${pend} pendientes</span></div>
-    <div class="callout" style="margin-top:12px"><b>Abrir WhatsApp</b> abre el chat con el <b>mensaje ya escrito</b> → solo das <b>Enviar</b> en WhatsApp → <b>Marcar enviado</b>.</div>
+    <div class="row between">
+      <div class="row" style="gap:10px;align-items:center">
+        <h3 style="margin:0">Números</h3>
+        <input type="search" class="list-search" placeholder="Buscar…  (Ctrl+F)" style="width:240px">
+        <span class="search-count muted" style="font-size:12px"></span>
+      </div>
+      <span class="muted">${pend} pendientes</span>
+    </div>
+    <div class="callout" style="margin-top:12px">En cada número: <b>elige la plantilla</b> → <b>Abrir WhatsApp</b> (abre el chat con el mensaje ya escrito) → das <b>Enviar</b> → <b>Marcar enviado</b>. Variables: <span class="code">{{nombre}}</span> <span class="code">{{numero}}</span>.</div>
     <div style="margin-top:6px">${leads.length ? leads.map(waLeadCard).join('') : '<div class="empty">No hay números. Agrégalos en la pestaña Números.</div>'}</div>
   </div>`;
 }
 
 function waLeadCard(l) {
   const cc = DB.settings.waCountryCode || '57';
-  return `<div class="card" style="background:var(--panel-2);margin-bottom:10px">
+  return `<div class="card" data-search="${esc(((l.nombre || '') + ' ' + (l.numero || '') + ' ' + (l.notas || '')).toLowerCase())}" style="background:var(--panel-2);margin-bottom:10px">
     <div class="row between">
       <div><b>${esc(l.nombre || ('+' + cc + ' ' + l.numero))}</b> <span class="muted mono">+${esc(cc)} ${esc(l.numero)}</span></div>
       <span class="badge ${l.estado}">${l.estado}</span>
     </div>
-    <div class="row" style="margin-top:10px;gap:8px">
+    <div class="row" style="margin-top:10px;gap:8px;align-items:center;flex-wrap:wrap">
+      <select class="card-tpl" data-id="${l.id}" style="width:220px">${tplOptions(DB.waTemplates)}</select>
       <button class="sm" data-act="wa-copy" data-id="${l.id}">Copiar mensaje</button>
       <button class="sm primary" data-act="wa-open" data-id="${l.id}">Abrir WhatsApp</button>
       <button class="sm" data-act="wa-sent" data-id="${l.id}" ${l.estado === 'enviado' ? 'disabled' : ''}>Marcar enviado</button>
@@ -397,7 +429,8 @@ function waLeadCard(l) {
 }
 
 async function waCopy(id) {
-  const tpl = DB.waTemplates.find((t) => t.id === val('#wa-tpl'));
+  const sel = document.querySelector('.card-tpl[data-id="' + id + '"]');
+  const tpl = DB.waTemplates.find((t) => t.id === (sel ? sel.value : ''));
   if (!tpl) return toast('Crea o elige una plantilla', 'err');
   const lead = DB.waLeads.find((l) => l.id === id);
   await api.clipboard.write(renderMsg(tpl.cuerpo, lead));
@@ -405,7 +438,8 @@ async function waCopy(id) {
 }
 
 async function waOpen(id) {
-  const tpl = DB.waTemplates.find((t) => t.id === val('#wa-tpl'));
+  const sel = document.querySelector('.card-tpl[data-id="' + id + '"]');
+  const tpl = DB.waTemplates.find((t) => t.id === (sel ? sel.value : ''));
   if (!tpl) return toast('Crea o elige una plantilla', 'err');
   const lead = DB.waLeads.find((l) => l.id === id);
   await api.wa.open({ numero: lead.numero, mensaje: renderMsg(tpl.cuerpo, lead) });
@@ -598,12 +632,39 @@ function onChange(e) {
   const el = e.target.closest('[data-act]');
   if (!el) return;
   if (el.dataset.act === 'select-all') {
-    document.querySelectorAll('.rcp:not([disabled])').forEach((c) => { c.checked = el.checked; });
+    document.querySelectorAll('.rcp:not([disabled])').forEach((c) => {
+      const tr = c.closest('tr');
+      if (tr && tr.style.display === 'none') return; // respeta el filtro de búsqueda
+      c.checked = el.checked;
+    });
   }
+}
+
+function onInput(e) {
+  const el = e.target;
+  if (!el.classList || !el.classList.contains('list-search')) return;
+  const q = el.value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('[data-search]').forEach((row) => {
+    const match = !q || row.dataset.search.includes(q);
+    row.style.display = match ? '' : 'none';
+    if (match) shown++;
+  });
+  const counter = document.querySelector('.search-count');
+  if (counter) counter.textContent = q ? (shown + (shown === 1 ? ' resultado' : ' resultados')) : '';
 }
 
 document.addEventListener('click', onClick);
 document.addEventListener('change', onChange);
+document.addEventListener('input', onInput);
+
+// Ctrl/Cmd+F enfoca el buscador de la lista actual (como en VS Code).
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+    const s = document.querySelector('.list-search');
+    if (s) { e.preventDefault(); s.focus(); s.select(); }
+  }
+});
 
 api.onEmailProgress((d) => {
   const box = document.querySelector('#send-progress');

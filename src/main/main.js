@@ -227,23 +227,28 @@ ipcMain.handle('templates:remove', (_e, id) => {
 });
 
 // ---------- email send campaign ----------
-ipcMain.handle('email:send', async (_e, { templateId, contactIds }) => {
+ipcMain.handle('email:send', async (_e, payload) => {
   const d = store.get();
   const pass = decryptPass(d.email.encPass);
   if (!d.email.smtpUser || !pass) throw new Error('Configura primero el correo en Ajustes.');
-  const tpl = d.emailTemplates.find((t) => t.id === templateId);
-  if (!tpl) throw new Error('Plantilla no encontrada.');
 
-  const targets = d.emailContacts.filter(
-    (c) => contactIds.includes(c.id) && !c.optOut && c.email
-  );
+  // Cada destinatario lleva su propia plantilla: items = [{ contactId, templateId }]
+  const targets = ((payload && payload.items) || [])
+    .map((it) => {
+      const c = d.emailContacts.find((x) => x.id === it.contactId);
+      const tpl = d.emailTemplates.find((t) => t.id === it.templateId);
+      return c && tpl && !c.optOut && c.email ? { c, tpl } : null;
+    })
+    .filter(Boolean);
+  if (!targets.length) throw new Error('No hay destinatarios válidos con plantilla.');
+
   const delay = Math.max(0, Number(d.settings.delaySeconds) || 0) * 1000;
   const cap = Math.max(1, Number(d.settings.dailyCap) || 1);
   const list = targets.slice(0, cap);
 
   let sent = 0, failed = 0;
   for (let i = 0; i < list.length; i++) {
-    const c = list[i];
+    const { c, tpl } = list[i];
     const subject = render(tpl.asunto, c);
     const body = render(tpl.cuerpo, c);
     let status = 'enviado', error = '';
