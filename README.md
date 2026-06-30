@@ -173,6 +173,18 @@ Resultado en `dist/`:
 
 ---
 
+## 📱 Versión móvil (Android / PWA)
+
+En [`mobile/`](mobile/) hay una **PWA autónoma** con los módulos de **Instagram y WhatsApp** (sin correo). En el teléfono los botones abren directamente las apps nativas, y el enlace de WhatsApp lleva el mensaje ya escrito. Se puede **instalar como app** y empaquetar en un **APK** con [PWABuilder](https://www.pwabuilder.com/) tras publicarla en GitHub Pages.
+
+```bash
+npm run mobile:serve   # probarla en local (http://localhost:5173)
+```
+
+Guía completa de instalación y generación del APK en [`mobile/README.md`](mobile/README.md).
+
+---
+
 ## ⚖️ Uso responsable
 
 Esta herramienta está pensada para **prospección legítima** hacia contactos con interés real:

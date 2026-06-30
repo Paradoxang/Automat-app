@@ -6,7 +6,9 @@
   "scripts": {
     "start": "electron .",
     "makeicon": "node tools/makeicon.js",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "mobile:icons": "node mobile/tools/make-mobile-icons.js",
+    "mobile:serve": "node mobile/tools/serve.js"
   },
   "author": "",
   "license": "MIT",
